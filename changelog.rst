@@ -1,6 +1,33 @@
 Changelog
 =========
 
+v1.1.0 (2016-10-27)
+-------------------
+
+- Update changelog. [Martin Raspaud]
+
+- Bump version: 1.0.1 → 1.1.0. [Martin Raspaud]
+
+- Merge branch 'master' into develop. [Martin Raspaud]
+
+- Enable travis testing for py3. [Antonio Valentino]
+
+- Fix regression in TLE reading. [Antonio Valentino]
+
+- Python 3 compatibility. [Antonio Valentino]
+
+v1.0.1 (2016-02-17)
+-------------------
+
+- Update changelog. [Martin Raspaud]
+
+- Bump version: 1.0.0 → 1.0.1. [Martin Raspaud]
+
+- Change sun_angle test to AlmostEqual. [Martin Raspaud]
+
+  Signed-off-by: Martin Raspaud <martin.raspaud@smhi.se>
+
+
 v1.0.0 (2015-08-25)
 -------------------
 

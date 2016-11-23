@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2011, 2012, 2013, 2014.
+# Copyright (c) 2011, 2012, 2013, 2014, 2015.
 
 # Author(s):
 
@@ -814,4 +814,4 @@ if __name__ == "__main__":
         lon, lat = np.rad2deg((lon, lat))
         az, el = o.get_observer_look(t, obs_lon, obs_lat, obs_alt)
         ob = o.get_orbit_number(t, tbus_style=True)
-        print az, el, ob
+        print(az, el, ob)
