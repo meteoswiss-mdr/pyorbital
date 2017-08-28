@@ -332,7 +332,11 @@ def get_norad_line(satname, satnumber):
     #print "... start get_norad_line"
 
     platform = satname.strip().upper() # only upper case
-    satnum = str(int(satnumber))   # get rid of leading zeros
+    if satnumber == "":
+        satnum = ""
+        platform = platform.replace("-"," ")
+    else:
+        satnum = str(int(satnumber))   # get rid of leading zeros
 
     print "... get orbital identification line (norad) for", platform, satnum
     key = platform+" "+satnum
