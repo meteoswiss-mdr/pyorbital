@@ -25,11 +25,12 @@
 """Module for computing the orbital parameters of satellites.
 """
 
-from datetime import datetime, timedelta
-import numpy as np
-from pyorbital import tlefile
-from pyorbital import astronomy
 import warnings
+from datetime import datetime, timedelta
+
+import numpy as np
+
+from pyorbital import astronomy, dt2np, tlefile
 
 ECC_EPS = 1.0e-6  # Too low for computing further drops.
 ECC_LIMIT_LOW = -1.0e-3
@@ -71,6 +72,54 @@ class OrbitalError(Exception):
     pass
 
 
+def get_observer_look(sat_lon, sat_lat, sat_alt, utc_time, lon, lat, alt):
+    """Calculate observers look angle to a satellite.
+    http://celestrak.com/columns/v02n02/
+
+    utc_time: Observation time (datetime object)
+    lon: Longitude of observer position on ground in degrees east
+    lat: Latitude of observer position on ground in degrees north
+    alt: Altitude above sea-level (geoid) of observer position on ground in km
+
+    Return: (Azimuth, Elevation)
+    """
+    (pos_x, pos_y, pos_z), (vel_x, vel_y, vel_z) = astronomy.observer_position(
+        utc_time, sat_lon, sat_lat, sat_alt)
+
+    (opos_x, opos_y, opos_z), (ovel_x, ovel_y, ovel_z) = \
+        astronomy.observer_position(utc_time, lon, lat, alt)
+
+    lon = np.deg2rad(lon)
+    lat = np.deg2rad(lat)
+
+    theta = (astronomy.gmst(utc_time) + lon) % (2 * np.pi)
+
+    rx = pos_x - opos_x
+    ry = pos_y - opos_y
+    rz = pos_z - opos_z
+
+    sin_lat = np.sin(lat)
+    cos_lat = np.cos(lat)
+    sin_theta = np.sin(theta)
+    cos_theta = np.cos(theta)
+
+    top_s = sin_lat * cos_theta * rx + \
+        sin_lat * sin_theta * ry - cos_lat * rz
+    top_e = -sin_theta * rx + cos_theta * ry
+    top_z = cos_lat * cos_theta * rx + \
+        cos_lat * sin_theta * ry + sin_lat * rz
+
+    az_ = np.arctan(-top_e / top_s)
+
+    az_ = np.where(top_s > 0, az_ + np.pi, az_)
+    az_ = np.where(az_ < 0, az_ + 2 * np.pi, az_)
+
+    rg_ = np.sqrt(rx * rx + ry * ry + rz * rz)
+    el_ = np.arcsin(top_z / rg_)
+
+    return np.rad2deg(az_), np.rad2deg(el_)
+
+
 class Orbital(object):
 
     """Class for orbital computations.
@@ -97,7 +146,7 @@ class Orbital(object):
         """
 
         # Propagate backwards to ascending node
-        dt = timedelta(minutes=10)
+        dt = np.timedelta64(10, 'm')
         t_old = utc_time
         t_new = t_old - dt
         pos0, vel0 = self.get_position(t_old, normalize=False)
@@ -177,12 +226,14 @@ class Orbital(object):
         http://celestrak.com/columns/v02n02/
 
         utc_time: Observation time (datetime object)
-        lon: Longitude of observer position on ground
-        lat: Latitude of observer position on ground
-        alt: Altitude above sea-level (geoid) of observer position on ground
+        lon: Longitude of observer position on ground in degrees east
+        lat: Latitude of observer position on ground in degrees north
+        alt: Altitude above sea-level (geoid) of observer position on ground in km
 
         Return: (Azimuth, Elevation)
         """
+
+        utc_time = dt2np(utc_time)
         (pos_x, pos_y, pos_z), (vel_x, vel_y, vel_z) = self.get_position(
             utc_time, normalize=False)
         (opos_x, opos_y, opos_z), (ovel_x, ovel_y, ovel_z) = \
@@ -222,6 +273,7 @@ class Orbital(object):
         """Calculate orbit number at specified time.
         Optionally use TBUS-style orbit numbering (TLE orbit number + 1)
         """
+        utc_time = np.datetime64(utc_time)
         try:
             dt = astronomy._days(utc_time - self.orbit_elements.an_time)
             orbit_period = astronomy._days(self.orbit_elements.an_period)
@@ -238,7 +290,7 @@ class Orbital(object):
 
             self.orbit_elements.an_period = self.orbit_elements.an_time - \
                 self.get_last_an_time(self.orbit_elements.an_time
-                                      - timedelta(minutes=10))
+                                      - np.timedelta64(10, 'm'))
 
             dt = astronomy._days(utc_time - self.orbit_elements.an_time)
             orbit_period = astronomy._days(self.orbit_elements.an_period)
@@ -636,7 +688,12 @@ class _SGDP4(object):
     def propagate(self, utc_time):
         kep = {}
 
-        ts = astronomy._days(utc_time - self.t_0) * XMNPDA
+        # get the time delta in minutes
+        #ts = astronomy._days(utc_time - self.t_0) * XMNPDA
+        # print utc_time.shape
+        # print self.t_0
+        utc_time = dt2np(utc_time)
+        ts = (utc_time - self.t_0) / np.timedelta64(1, 'm')
 
         em = self.eo
         xinc = self.xincl
@@ -749,7 +806,7 @@ class _SGDP4(object):
         xinck = xinc + 1.5 * temp2 * self.cosIO * self.sinIO * cos2u
 
         if np.any(rk < 1):
-            raise Exception('Satellite crased at time %s', utc_time)
+            raise Exception('Satellite crashed at time %s', utc_time)
 
         temp0 = np.sqrt(a)
         temp2 = XKE / (a * temp0)
