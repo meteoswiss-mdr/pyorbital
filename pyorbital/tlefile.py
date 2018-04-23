@@ -32,9 +32,14 @@ except ImportError:
     from urllib.request import urlopen
 import os
 import glob
+import numpy as np
 
 TLE_URLS = ('http://celestrak.com/NORAD/elements/weather.txt',
-            'http://celestrak.com/NORAD/elements/resource.txt')
+            'http://celestrak.com/NORAD/elements/resource.txt',
+            'https://www.celestrak.com/NORAD/elements/cubesat.txt',
+            'http://celestrak.com/NORAD/elements/stations.txt',
+            'https://www.celestrak.com/NORAD/elements/sarsat.txt',
+            'https://www.celestrak.com/NORAD/elements/noaa.txt')
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +60,8 @@ def read_platform_numbers(in_upper=False, num_as_int=False):
             # skip comment lines
             if not row.startswith('#'):
                 parts = row.split()
+                if len(parts) < 2:
+                    continue
                 if in_upper:
                     parts[0] = parts[0].upper()
                 if num_as_int:
@@ -141,19 +148,21 @@ def read(platform, tle_file=None, line1=None, line2=None):
 def fetch(destination):
     """fetch TLE from internet and save it to *destination*.
    """
-    with open(destination, "w") as dest:
+    with io.open(destination, mode="w", encoding="utf-8") as dest:
         for url in TLE_URLS:
             response = urlopen(url)
-            dest.write(response.read())
+            dest.write(response.read().decode("utf-8"))
 
 
 class ChecksumError(Exception):
+
     '''ChecksumError.
     '''
     pass
 
 
 class Tle(object):
+
     """Class holding TLE objects.
    """
 
@@ -293,8 +302,9 @@ class Tle(object):
         self.id_launch_piece = self._line1[14:17]
         self.epoch_year = self._line1[18:20]
         self.epoch_day = float(self._line1[20:32])
-        self.epoch = (datetime.datetime.strptime(self.epoch_year, "%y") +
-                      datetime.timedelta(days=self.epoch_day - 1))
+        self.epoch = \
+            np.datetime64(datetime.datetime.strptime(self.epoch_year, "%y") +
+                          datetime.timedelta(days=self.epoch_day - 1), 'us')
         self.mean_motion_derivative = float(self._line1[33:43])
         self.mean_motion_sec_derivative = _read_tle_decimal(self._line1[44:52])
         self.bstar = _read_tle_decimal(self._line1[53:61])
@@ -331,8 +341,11 @@ def get_norad_line(satname, satnumber):
     #print "... start get_norad_line"
 
     platform = satname.strip().upper() # only upper case
-    if satnumber=="":
-        satnum = satnumber 
+    #if satnumber=="":
+    #    satnum = satnumber 
+    if satnumber == "":
+        satnum = ""
+        platform = platform.replace("-"," ")
     else:
         satnum = str(int(satnumber))   # get rid of leading zeros
 
