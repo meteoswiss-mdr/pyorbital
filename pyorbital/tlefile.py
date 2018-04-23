@@ -38,7 +38,6 @@ TLE_URLS = ('http://celestrak.com/NORAD/elements/weather.txt',
 
 LOGGER = logging.getLogger(__name__)
 
-
 def read_platform_numbers(in_upper=False, num_as_int=False):
     '''Read platform numbers from $PPP_CONFIG_DIR/platforms.txt if available.
     '''
@@ -332,7 +331,10 @@ def get_norad_line(satname, satnumber):
     #print "... start get_norad_line"
 
     platform = satname.strip().upper() # only upper case
-    satnum = str(int(satnumber))   # get rid of leading zeros
+    if satnumber=="":
+        satnum = satnumber 
+    else:
+        satnum = str(int(satnumber))   # get rid of leading zeros
 
     print "... get orbital identification line (norad) for", platform, satnum
     key = platform+" "+satnum
@@ -368,6 +370,7 @@ def get_norad_line(satname, satnumber):
                "METEOSAT 9"          :"METEOSAT-9 (MSG-2)",\
                "METEOSAT 10"         :"METEOSAT-10 (MSG-3)",\
                "METEOSAT 11"         :"METEOSAT-11 (MSG-4)",\
+               "HSAF 10"             :"METEOSAT-10 (MSG-3)",\
                "METOP A"             :"METOP-A",\
                "METOP B"             :"METOP-B",\
                "MTSAT 2"             :"MTSAT-2",\
