@@ -576,9 +576,9 @@ class _SGDP4(object):
 
         if self.period >= 225:
             ## Deep-Space model
-            #self.mode = SGDP4_DEEP_NORM  ### change by Ulrich Hamann
-            # SGDP4_DEEP_NORM not yet implemented, use near space approximation
-            self.mode = SGDP4_NEAR_NORM
+            self.mode = SGDP4_DEEP_NORM  # SGDP4_DEEP_NORM not yet implemented
+            # if you need a quick bad dirty fix, comment out the line above and use the near space approximation 
+            #self.mode = SGDP4_NEAR_NORM 
         elif self.perigee < 220:
             # Near-space, simplified equations
             self.mode = SGDP4_NEAR_SIMP
