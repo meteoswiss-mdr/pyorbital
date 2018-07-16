@@ -350,7 +350,8 @@ def get_norad_line(satname, satnumber):
         satnum = str(int(satnumber))   # get rid of leading zeros
 
     print "... get orbital identification line (norad) for", platform, satnum
-    key = platform+" "+satnum
+    key = platform.strip()+" "+satnum.strip()
+    key = key.strip()
     sat_dic = {"COMS 1"              :"COMS 1",\
                "ELEKTRO-L 1"         :"ELEKTRO-L 1 (GOMS 2)",\
                "ELEKTRO-L 1"         :"ELEKTRO-L 2",\
@@ -394,7 +395,7 @@ def get_norad_line(satname, satnumber):
     if key in sat_dic:
         return sat_dic[key]
     else:
-        print "*** Warning, unknown satellite ", key, " in get_norad_line (pyorbital/tlefile.py)"
+        print "*** Warning, unknown satellite \'"+key+"\' in get_norad_line (pyorbital/tlefile.py)"
         return key
 
 def main():

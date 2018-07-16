@@ -135,13 +135,13 @@ class Orbital(object):
     it is provided.
     """
 
-    def __init__(self, satellite, tle_file=None, line1=None, line2=None):
+    def __init__(self, satellite, tle_file=None, line1=None, line2=None, use_NEAR_for_DEEP_space=False):
         satellite = satellite.upper()
         self.satellite_name = satellite
         self.tle = tlefile.read(satellite, tle_file=tle_file,
                                 line1=line1, line2=line2)
         self.orbit_elements = OrbitElements(self.tle)
-        self._sgdp4 = _SGDP4(self.orbit_elements)
+        self._sgdp4 = _SGDP4(self.orbit_elements, use_NEAR_for_DEEP_space=use_NEAR_for_DEEP_space)
 
     def __str__(self):
         return self.satellite_name + " " + str(self.tle)
@@ -523,7 +523,7 @@ class _SGDP4(object):
     """Class for the SGDP4 computations.
     """
 
-    def __init__(self, orbit_elements):
+    def __init__(self, orbit_elements, use_NEAR_for_DEEP_space=False):
         self.mode = None
 
         perigee = orbit_elements.perigee
@@ -575,10 +575,12 @@ class _SGDP4(object):
         self.period = (2 * np.pi * 1440.0 / XMNPDA) / self.xnodp
 
         if self.period >= 225:
-            ## Deep-Space model
-            self.mode = SGDP4_DEEP_NORM  # SGDP4_DEEP_NORM not yet implemented
-            # if you need a quick bad dirty fix, comment out the line above and use the near space approximation 
-            #self.mode = SGDP4_NEAR_NORM 
+            if not use_NEAR_for_DEEP_space:
+                ## Deep-Space model
+                self.mode = SGDP4_DEEP_NORM  # SGDP4_DEEP_NORM not yet implemented, this will produce an error
+            else:
+                # this is a quick bad dirty fix, comment out the line above and use the near space approximation 
+                self.mode = SGDP4_NEAR_NORM 
         elif self.perigee < 220:
             # Near-space, simplified equations
             self.mode = SGDP4_NEAR_SIMP
