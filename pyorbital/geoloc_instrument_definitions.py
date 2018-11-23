@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2013, 2014, 2015, 2017 Martin Raspaud
+# Copyright (c) 2013 - 2018 PyTroll Community
 
 # Author(s):
 
 #   Martin Raspaud <martin.raspaud@smhi.se>
 #   Mikhail Itkin <itkin.m@gmail.com>
+#   Adam Dybbroe <adam.dybbroe@smhi.se>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -141,15 +142,21 @@ def avhrr_40_geom(scans_nb):
 
 
 def viirs(scans_nb, scan_indices=slice(0, None),
-          chn_pixels=6400, scan_lines=32):
+          chn_pixels=6400, scan_lines=32, scan_step=1):
     """Describe VIIRS instrument geometry, I-band by default.
     VIIRS scans several lines simultaneously (there are 16 detectors for each
     M-band, 32 detectors for each I-band) so the scan angles (and times) are
     two-dimensional arrays, contrary to AVHRR for example.
+
+    scan_step: The increment in number of scans. E.g. if scan_step is 100 and
+               the number of scans (scans_nb) is 10 then these 10 scans are
+               distributed over the swath so that between each scan there are
+               99 emtpy (excluded) scans
+
     """
 
     entire_width = np.arange(chn_pixels)
-    scan_points = entire_width[scan_indices]
+    scan_points = entire_width[scan_indices.astype('int')]
     scan_pixels = len(scan_points)
 
     ''' initial angle 55.84 deg replaced with 56.28 deg found in
@@ -167,9 +174,10 @@ def viirs(scans_nb, scan_indices=slice(0, None),
     npp = np.tile(scan, [scans_nb, 1]).T
 
     # from the timestamp in the filenames, a granule takes 1:25.400 to record
-    # (85.4 seconds) so 1.779166667 would be the duration of 1 scanline
-    # dividing the duration of a single scan by a width of 6400 pixels results
-    # in 0.0002779947917 seconds for each column of 32 pixels in the scanline
+    # (85.4 seconds) so 1.779166667 would be the duration of 1 scanline (48
+    # scans per granule) dividing the duration of a single scan by a width of
+    # 6400 pixels results in 0.0002779947917 seconds for each column of 32
+    # pixels in the scanline
 
     # the individual times per pixel are probably wrong, unless the scanning
     # behaves the same as for AVHRR, The VIIRS sensor rotates to allow internal
@@ -177,10 +185,13 @@ def viirs(scans_nb, scan_indices=slice(0, None),
     # always moves in the same direction.  more info @
     # http://www.eoportal.org/directory/pres_NPOESSNationalPolarorbitingOperationalEnvironmentalSatelliteSystem.html
 
-    offset = np.arange(scans_nb) * 1.779166667
-    times = (np.tile(scan_points * 0.0002779947917,
-                     [np.int(scan_lines), np.int(scans_nb)])
-             + np.expand_dims(offset, 1))
+    SEC_EACH_SCANCOLUMN = 0.0002779947917
+    sec_scan_duration = 1.779166667
+    times = np.tile(scan_points * SEC_EACH_SCANCOLUMN,
+                    [np.int(scans_nb*scan_lines), 1])
+    offset = np.repeat(np.arange(scans_nb) *
+                       sec_scan_duration*scan_step, scan_lines)
+    times += np.expand_dims(offset, 1)
 
     # build the scan geometry object
     return ScanGeometry(npp, times)
@@ -252,9 +263,12 @@ def amsua_edge_geom(scans_nb):
 
 def mhs(scans_nb, edges_only=False):
     """ Describe MHS instrument geometry
+
     See:
+
     - https://www.eumetsat.int/website/home/Satellites/CurrentSatellites/Metop/MetopDesign/MHS/index.html
-    - https://www1.ncdc.noaa.gov/pub/data/satellite/publications/podguides/N-15%20thru%20N-19/pdf/0.0%20NOAA%20KLM%20Users%20Guide.pdf
+    - https://www1.ncdc.noaa.gov/pub/data/satellite/publications/podguides/
+          N-15%20thru%20N-19/pdf/0.0%20NOAA%20KLM%20Users%20Guide.pdf
       (NOAA KLM Users Guide –August 2014 Revision)
 
     Parameters:
@@ -269,9 +283,9 @@ def mhs(scans_nb, edges_only=False):
     """
 
     scan_len = 90  # 90 samples per scan
-    scan_rate = 8/3.  # single scan, seconds
+    scan_rate = 8 / 3.  # single scan, seconds
     scan_angle = -49.444  # swath, degrees
-    sampling_interval = (8/3.-1)/90.  # single view, seconds
+    sampling_interval = (8 / 3. - 1) / 90.  # single view, seconds
 
     if edges_only:
         scan_points = np.array([0, scan_len - 1])
@@ -305,10 +319,12 @@ def mhs_edge_geom(scans_nb):
 ################################################################
 
 def hirs4(scans_nb, edges_only=False):
-    """ Describe HIRS/4 instrument geometry
+    """Describe HIRS/4 instrument geometry.
+
     See:
     - https://www.eumetsat.int/website/home/Satellites/CurrentSatellites/Metop/MetopDesign/HIRS/index.html
-    - https://www1.ncdc.noaa.gov/pub/data/satellite/publications/podguides/N-15%20thru%20N-19/pdf/0.0%20NOAA%20KLM%20Users%20Guide.pdf
+    - https://www1.ncdc.noaa.gov/pub/data/satellite/publications/podguides/
+          N-15%20thru%20N-19/pdf/0.0%20NOAA%20KLM%20Users%20Guide.pdf
       (NOAA KLM Users Guide –August 2014 Revision)
 
     Parameters:
@@ -325,7 +341,7 @@ def hirs4(scans_nb, edges_only=False):
     scan_len = 56  # 56 samples per scan
     scan_rate = 6.4  # single scan, seconds
     scan_angle = -49.5  # swath, degrees
-    sampling_interval = abs(scan_rate)/scan_len  # single view, seconds
+    sampling_interval = abs(scan_rate) / scan_len  # single view, seconds
 
     if edges_only:
         scan_points = np.array([0, scan_len - 1])
@@ -361,8 +377,12 @@ def hirs4_edge_geom(scans_nb):
 def atms(scans_nb, edges_only=False):
     """ Describe MHS instrument geometry
     See:
-    https://dtcenter.org/com-GSI/users/docs/presentations/2013_workshop/Garrett_GSI_2013.pdf (Assimilation of Suomi-NPP ATMS, Kevin Garrett et al., August 8, 2013)
-    https://www.star.nesdis.noaa.gov/star/documents/meetings/2016JPSSAnnual/S4/S4_13_JPSSScience2016_session4Part2_ATMS_Scan_Reversal_HYANG.pdf (Suomi NPP ATMS Scan Reversal Study, Hu (Tiger) Yang, NOAA/STAR ATMS SDR Working Group)
+
+    - https://dtcenter.org/com-GSI/users/docs/presentations/2013_workshop/
+          Garrett_GSI_2013.pdf (Assimilation of Suomi-NPP ATMS, Kevin Garrett et al., August 8, 2013)
+    - https://www.star.nesdis.noaa.gov/star/documents/meetings/2016JPSSAnnual/
+          S4/S4_13_JPSSScience2016_session4Part2_ATMS_Scan_Reversal_HYANG.pdf
+          (Suomi NPP ATMS Scan Reversal Study, Hu (Tiger) Yang, NOAA/STAR ATMS SDR Working Group)
 
     Parameters:
        scans_nb | int -  number of scan lines
@@ -376,7 +396,7 @@ def atms(scans_nb, edges_only=False):
     """
 
     scan_len = 96  # 96 samples per scan
-    scan_rate = 8/3.  # single scan, seconds
+    scan_rate = 8 / 3.  # single scan, seconds
     scan_angle = -52.7  # swath, degrees
     sampling_interval = 18e-3  # single view, seconds
 
@@ -403,3 +423,85 @@ def atms(scans_nb, edges_only=False):
 def atms_edge_geom(scans_nb):
     # we take only edge pixels
     return atms(scans_nb, edges_only=True)
+
+################################################################
+#
+#   OLCI
+#
+################################################################
+
+
+def olci(scans_nb, scan_points=None):
+    """Definition of the OLCI instrument.
+
+    Source: Sentinel-3 OLCI Coverage
+    https://sentinel.esa.int/web/sentinel/user-guides/sentinel-3-olci/coverage
+    """
+
+    if scan_points is None:
+        scan_len = 4000  # samples per scan
+        scan_points = np.arange(4000)
+    else:
+        scan_len = len(scan_points)
+    # scan_rate = 0.044  # single scan, seconds
+    scan_angle_west = 46.5  # swath, degrees
+    scan_angle_east = -22.1  # swath, degrees
+    # sampling_interval = 18e-3  # single view, seconds
+    # build the olci instrument scan line angles
+    scanline_angles = np.linspace(np.deg2rad(scan_angle_west),
+                                  np.deg2rad(scan_angle_east), scan_len)
+    inst = np.vstack((scanline_angles, np.zeros(scan_len,)))
+
+    inst = np.tile(inst[:, np.newaxis, :], [1, np.int(scans_nb), 1])
+
+    # building the corresponding times array
+    # times = (np.tile(scan_points * 0.000025 + 0.0025415, [scans_nb, 1])
+    #         + np.expand_dims(offset, 1))
+
+    times = np.tile(np.zeros_like(scanline_angles), [np.int(scans_nb), 1])
+    # if apply_offset:
+    #     offset = np.arange(np.int(scans_nb)) * frequency
+    #     times += np.expand_dims(offset, 1)
+
+    return ScanGeometry(inst, times)
+
+
+def ascat(scan_nb, scan_points=None):
+    """ASCAT make two scans one to the left and one to the right of the
+    sub-satellite track.
+
+    """
+
+    if scan_points is None:
+        scan_len = 42  # samples per scan
+        scan_points = np.arange(42)
+    else:
+        scan_len = len(scan_points)
+
+    scan_angle_inner = -25.0  # swath, degrees
+    scan_angle_outer = -53.0  # swath, degrees
+    scan_rate = 3.74747474747  # single scan, seconds
+    if scan_len < 2:
+        raise ValueError("Need at least two scan points!")
+
+    sampling_interval = scan_rate / float(np.max(scan_points) + 1)
+
+    # build the Metop/ascat instrument scan line angles
+    scanline_angles_one = np.linspace(-np.deg2rad(scan_angle_outer),
+                                      -np.deg2rad(scan_angle_inner), 21)
+    scanline_angles_two = np.linspace(np.deg2rad(scan_angle_inner),
+                                      np.deg2rad(scan_angle_outer), 21)
+
+    scan_angles = np.concatenate(
+        [scanline_angles_one, scanline_angles_two])[scan_points]
+
+    inst = np.vstack((scan_angles, np.zeros(scan_len * 1,)))
+    inst = np.tile(inst[:, np.newaxis, :], [1, np.int(scan_nb), 1])
+
+    # building the corresponding times array
+    offset = np.arange(scan_nb) * scan_rate
+
+    times = (np.tile(scan_points * sampling_interval,
+                     [np.int(scan_nb), 1]) + np.expand_dims(offset, 1))
+
+    return ScanGeometry(inst, times)

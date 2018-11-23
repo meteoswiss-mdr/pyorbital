@@ -28,9 +28,24 @@
 import warnings
 from datetime import datetime, timedelta
 
-import numpy as np
+from scipy import optimize
 
+import numpy as np
 from pyorbital import astronomy, dt2np, tlefile
+
+try:
+    import dask.array as da
+    has_dask = True
+except ImportError:
+    da = None
+    has_dask = False
+
+try:
+    import xarray as xr
+    has_xarray = True
+except ImportError:
+    xr = None
+    has_xarray = False
 
 ECC_EPS = 1.0e-6  # Too low for computing further drops.
 ECC_LIMIT_LOW = -1.0e-3
@@ -51,7 +66,7 @@ XJ3 = -0.253881e-5
 XKE = 0.743669161e-1
 XKMPER = 6378.135
 XMNPDA = 1440.0
-#MFACTOR = 7.292115E-5
+# MFACTOR = 7.292115E-5
 AE = 1.0
 SECDAY = 8.6400E4
 
@@ -111,14 +126,22 @@ def get_observer_look(sat_lon, sat_lat, sat_alt, utc_time, lon, lat, alt):
 
     az_ = np.arctan(-top_e / top_s)
 
-    if hasattr(az_, 'chunks'):
-        # dask array
-        import dask.array as da
-        az_ = da.where(top_s > 0, az_ + np.pi, az_)
-        az_ = da.where(az_ < 0, az_ + 2 * np.pi, az_)
+    if has_xarray and isinstance(az_, xr.DataArray):
+        az_data = az_.data
     else:
-        az_[top_s > 0] += np.pi
-        az_[az_ < 0] += 2 * np.pi
+        az_data = az_
+
+    if has_dask and isinstance(az_data, da.Array):
+        az_data = da.where(top_s > 0, az_data + np.pi, az_data)
+        az_data = da.where(az_data < 0, az_data + 2 * np.pi, az_data)
+    else:
+        az_data[np.where(top_s > 0)] += np.pi
+        az_data[np.where(az_data < 0)] += 2 * np.pi
+
+    if has_xarray and isinstance(az_, xr.DataArray):
+        az_.data = az_data
+    else:
+        az_ = az_data
 
     rg_ = np.sqrt(rx * rx + ry * ry + rz * rz)
     el_ = np.arcsin(top_z / rg_)
@@ -131,7 +154,7 @@ class Orbital(object):
     """Class for orbital computations.
 
     The *satellite* parameter is the name of the satellite to work on and is
-    used to retreive the right TLE data for internet or from *tle_file* in case
+    used to retrieve the right TLE data for internet or from *tle_file* in case
     it is provided.
     """
 
@@ -158,7 +181,7 @@ class Orbital(object):
         pos0, vel0 = self.get_position(t_old, normalize=False)
         pos1, vel1 = self.get_position(t_new, normalize=False)
         while not (pos0[2] > 0 and pos1[2] < 0):
-            pos0, vel0 = pos1, vel1
+            pos0 = pos1
             t_old = t_new
             t_new = t_old - dt
             pos1, vel1 = self.get_position(t_new, normalize=False)
@@ -171,7 +194,7 @@ class Orbital(object):
 
         # Bisect to z within 1 km
         while np.abs(pos1[2]) > 1:
-            pos0, vel0 = pos1, vel1
+            # pos0, vel0 = pos1, vel1
             dt = (t_old - t_new) / 2
             t_mid = t_old - dt
             pos1, vel1 = self.get_position(t_mid, normalize=False)
@@ -337,8 +360,8 @@ class Orbital(object):
             """Compute the inverse of elevation."""
             return -elevation(minutes)
 
-        def get_root_secant(fun, start, end, tol=0.01):
-            """Secant method."""
+        def get_root(fun, start, end, tol=0.01):
+            """Root finding scheme"""
             x_0 = end
             x_1 = start
             fx_0 = fun(end)
@@ -346,11 +369,9 @@ class Orbital(object):
             if abs(fx_0) < abs(fx_1):
                 fx_0, fx_1 = fx_1, fx_0
                 x_0, x_1 = x_1, x_0
-            while abs(x_0 - x_1) > tol:
-                x_n = x_1 - fx_1 * ((x_1 - x_0) / (fx_1 - fx_0))
-                x_0, x_1 = x_1, x_n
-                fx_0, fx_1 = fx_1, fun(x_n)
-            return x_1
+
+            x_n = optimize.brentq(fun, x_0, x_1)
+            return x_n
 
         def get_max_parab(fun, start, end, tol=0.01):
             """Successive parabolic interpolation."""
@@ -385,7 +406,7 @@ class Orbital(object):
         risetime = None
         falltime = None
         for guess in zcs:
-            horizon_mins = get_root_secant(
+            horizon_mins = get_root(
                 elevation, guess, guess + 1.0, tol=tol / 60.0)
             horizon_time = utc_time + timedelta(minutes=horizon_mins)
             if elev[guess] < 0:
@@ -442,15 +463,15 @@ class Orbital(object):
         tx0 = utc_time - timedelta(seconds=1.0)
         tx1 = utc_time
         idx = 0
-        #eps = 500.
+        # eps = 500.
         eps = 100.
         while abs(tx1 - tx0) > precision and idx < nmax_iter:
             tx0 = tx1
             fpr = fprime(tx0)
             # When the elevation is high the scale is high, and when
             # the elevation is low the scale is low
-            #var_scale = np.abs(np.sin(fpr[0] * np.pi/180.))
-            #var_scale = np.sqrt(var_scale)
+            # var_scale = np.abs(np.sin(fpr[0] * np.pi/180.))
+            # var_scale = np.sqrt(var_scale)
             var_scale = np.abs(fpr[0])
             tx1 = tx0 - timedelta(seconds=(eps * var_scale * fpr[1]))
             idx = idx + 1
@@ -521,25 +542,28 @@ class OrbitElements(object):
 class _SGDP4(object):
 
     """Class for the SGDP4 computations.
+    allow_NEAR_NORM: dirty fix for using the near space norm solution instead of the deep space solution 
+                     as deep space is not implemented yet. default is False
+                     dirty fix is used for parallax correction of SEVIRI data
     """
 
     def __init__(self, orbit_elements, use_NEAR_for_DEEP_space=False):
         self.mode = None
 
-        perigee = orbit_elements.perigee
+        # perigee = orbit_elements.perigee
         self.eo = orbit_elements.excentricity
         self.xincl = orbit_elements.inclination
         self.xno = orbit_elements.original_mean_motion
-        k_2 = CK2
-        k_4 = CK4
-        k_e = XKE
+        # k_2 = CK2
+        # k_4 = CK4
+        # k_e = XKE
         self.bstar = orbit_elements.bstar
         self.omegao = orbit_elements.arg_perigee
         self.xmo = orbit_elements.mean_anomaly
         self.xnodeo = orbit_elements.right_ascension
         self.t_0 = orbit_elements.epoch
         self.xn_0 = orbit_elements.mean_motion
-        A30 = -XJ3 * AE**3
+        # A30 = -XJ3 * AE**3
 
         if not(0 < self.eo < ECC_LIMIT_HIGH):
             raise OrbitalError('Eccentricity out of range: %e' % self.eo)
@@ -615,12 +639,11 @@ class _SGDP4(object):
 
         self.c1 = self.bstar * self.c2
 
-        self.c4 = (2.0 * self.xnodp * coef_1 * self.aodp * betao2 * (self.eta *
-                                                                     (2.0 + 0.5 * etasq) + self.eo * (0.5 + 2.0 *
-                                                                                                      etasq) - (2.0 * CK2) * tsi / (self.aodp * psisq) * (-3.0 *
-                                                                                                                                                          self.x3thm1 * (1.0 - 2.0 * eeta + etasq *
-                                                                                                                                                                         (1.5 - 0.5 * eeta)) + 0.75 * self.x1mth2 * (2.0 *
-                                                                                                                                                                                                                     etasq - eeta * (1.0 + etasq)) * np.cos(2.0 * self.omegao))))
+        self.c4 = (2.0 * self.xnodp * coef_1 * self.aodp * betao2 * (
+            self.eta * (2.0 + 0.5 * etasq) + self.eo * (0.5 + 2.0 * etasq) - (2.0 * CK2) * tsi /
+            (self.aodp * psisq) * (-3.0 * self.x3thm1 * (1.0 - 2.0 * eeta + etasq * (1.5 - 0.5 * eeta)) +
+                                   0.75 * self.x1mth2 * (2.0 * etasq - eeta * (1.0 + etasq)) *
+                                   np.cos(2.0 * self.omegao))))
 
         self.c5, self.c3, self.omgcof = 0.0, 0.0, 0.0
 
@@ -693,7 +716,7 @@ class _SGDP4(object):
         kep = {}
 
         # get the time delta in minutes
-        #ts = astronomy._days(utc_time - self.t_0) * XMNPDA
+        # ts = astronomy._days(utc_time - self.t_0) * XMNPDA
         # print utc_time.shape
         # print self.t_0
         utc_time = dt2np(utc_time)
@@ -860,6 +883,7 @@ def kep2xyz(kep):
     v_z = kep['rdotk'] * uz + kep['rfdotk'] * vz
 
     return np.array((x, y, z)), np.array((v_x, v_y, v_z))
+
 
 if __name__ == "__main__":
     obs_lon, obs_lat = np.deg2rad((12.4143, 55.9065))
