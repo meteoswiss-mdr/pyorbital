@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2011-2014
+# Copyright (c) 2011-2014, 2018
 
 # Author(s):
 
@@ -20,13 +20,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from setuptools import setup
-import imp
-
-version = imp.load_source('pyorbital.version', 'pyorbital/version.py')
+import os
+from setuptools import setup, find_packages
+import versioneer
 
 setup(name='pyorbital',
-      version=version.__version__,
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       description='Orbital parameters and astronomical computations in Python',
       author='Martin Raspaud, Esben S. Nielsen',
       author_email='martin.raspaud@smhi.se',
@@ -38,10 +38,10 @@ setup(name='pyorbital',
                    "Programming Language :: Python",
                    "Topic :: Scientific/Engineering",
                    "Topic :: Scientific/Engineering :: Astronomy"],
-      url="https://github.com/mraspaud/pyorbital",
+      url="https://github.com/pytroll/pyorbital",
       test_suite='pyorbital.tests.suite',
-      package_dir = {'pyorbital': 'pyorbital'},
-      packages = ['pyorbital'],
-      install_requires=['numpy>=1.11.0,!=1.14.0'],
+      packages=find_packages(),
+      package_data={'pyorbital': [os.path.join('etc', 'platforms.txt')]},
+      install_requires=['numpy>=1.11.0,!=1.14.0', 'scipy'],
       zip_safe=False,
       )
