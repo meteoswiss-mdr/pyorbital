@@ -542,9 +542,9 @@ class OrbitElements(object):
 class _SGDP4(object):
 
     """Class for the SGDP4 computations.
-    allow_NEAR_NORM: dirty fix for using the near space norm solution instead of the deep space solution 
-                     as deep space is not implemented yet. default is False
-                     dirty fix is used for parallax correction of SEVIRI data
+    use_NEAR_for_DEEP_space: dirty fix for using the near space norm solution instead of the deep space solution 
+                             as deep space is not implemented yet. default is False
+                             dirty fix is used for parallax correction of SEVIRI data
     """
 
     def __init__(self, orbit_elements, use_NEAR_for_DEEP_space=False):
