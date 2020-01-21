@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2011 - 2018
+# Copyright (c) 2011 - 2019
 
 # Author(s):
 
 #   Esben S. Nielsen <esn@dmi.dk>
 #   Martin Raspaud <martin.raspaud@smhi.se>
 #   Panu Lahtinen <panu.lahtinen@fmi.fi>
+#   Will Evonosky <william.evonosky@gmail.com>
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -35,13 +36,16 @@ import os
 import glob
 import numpy as np
 
-TLE_URLS = ('http://celestrak.com/NORAD/elements/weather.txt',
+TLE_URLS = ('http://www.celestrak.com/NORAD/elements/active.txt',
+            'http://celestrak.com/NORAD/elements/weather.txt',
             'http://celestrak.com/NORAD/elements/resource.txt',
             'https://www.celestrak.com/NORAD/elements/cubesat.txt',
             'http://celestrak.com/NORAD/elements/stations.txt',
             'https://www.celestrak.com/NORAD/elements/sarsat.txt',
             'https://www.celestrak.com/NORAD/elements/noaa.txt',
-            'https://www.celestrak.com/NORAD/elements/amateur.txt')
+            'https://www.celestrak.com/NORAD/elements/amateur.txt',
+            'https://www.celestrak.com/NORAD/elements/engineering.txt')
+
 
 LOGGER = logging.getLogger(__name__)
 PKG_CONFIG_DIR = os.path.join(os.path.realpath(os.path.dirname(__file__)), 'etc')
